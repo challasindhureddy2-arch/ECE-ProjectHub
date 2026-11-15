@@ -4,7 +4,14 @@ const API = "http://localhost:3000/api";
 let token = localStorage.getItem("token");
 let currentUser = JSON.parse(localStorage.getItem("user") || "null");
 
-// API request helper
+let socket = null;
+let notifications = [];
+let unreadCount = 0;
+
+// =====================================
+// API REQUEST HELPER
+// =====================================
+
 async function apiRequest(endpoint, method = "GET", data = null) {
     const options = {
         method,
@@ -22,6 +29,7 @@ async function apiRequest(endpoint, method = "GET", data = null) {
     }
 
     const response = await fetch(API + endpoint, options);
+
     const result = await response.json();
 
     if (!response.ok) {
@@ -31,20 +39,198 @@ async function apiRequest(endpoint, method = "GET", data = null) {
     return result;
 }
 
-// Show login page
+// =====================================
+// PERSISTENT NOTIFICATIONS
+// =====================================
+
+async function loadNotifications() {
+    try {
+        const data = await apiRequest("/notifications");
+
+        notifications = Array.isArray(data)
+            ? data.map(item => ({
+                id: item.id,
+                message: item.message,
+                time: item.created_at || item.createdAt,
+                is_read: Boolean(item.is_read)
+            }))
+            : [];
+
+        unreadCount = notifications.filter(
+            item => !item.is_read
+        ).length;
+
+        updateNotificationDisplay();
+
+    } catch (error) {
+        console.error("Failed to load notifications:", error.message);
+    }
+}
+
+// =====================================
+// REAL-TIME SOCKET.IO NOTIFICATIONS
+// =====================================
+
+function connectNotifications() {
+    if (!token || typeof io !== "function") {
+        console.warn("Socket.IO client is not available.");
+        return;
+    }
+
+    if (socket) {
+        socket.disconnect();
+        socket = null;
+    }
+
+    socket = io("http://localhost:3000", {
+        auth: {
+            token: token
+        }
+    });
+
+    socket.on("connect", () => {
+        console.log("Connected to real-time notifications.");
+    });
+
+    socket.on("connect_error", (error) => {
+        console.error("Notification connection error:", error.message);
+    });
+
+    socket.on("notification", (data) => {
+        addNotification(data);
+    });
+
+    socket.on("project_updated", async () => {
+        console.log("Project update received.");
+
+        if (!document.getElementById("dashboardPage").classList.contains("hidden")) {
+            await loadDashboard();
+
+            if (!document.getElementById("projectsSection").classList.contains("hidden")) {
+                await loadProjects();
+            }
+        }
+    });
+
+    socket.on("task_updated", async () => {
+        console.log("Task update received.");
+
+        if (!document.getElementById("dashboardPage").classList.contains("hidden")) {
+            await loadDashboard();
+
+            if (!document.getElementById("tasksSection").classList.contains("hidden")) {
+                await loadTasks();
+            }
+        }
+    });
+
+    socket.on("comment_updated", async () => {
+        console.log("Comment update received.");
+
+        if (!document.getElementById("commentsSection").classList.contains("hidden")) {
+            await loadComments();
+        }
+    });
+}
+
+// Add new notification
+function addNotification(data) {
+    if (data.id && notifications.some(item => item.id === data.id)) {
+        return;
+    }
+
+    const item = {
+        id: data.id,
+        message: data.message || "You have a new notification.",
+        time: data.createdAt || data.created_at || new Date().toISOString(),
+        is_read: false
+    };
+
+    notifications.unshift(item);
+
+    notifications = notifications.slice(0, 50);
+
+    unreadCount++;
+
+    updateNotificationDisplay();
+}
+
+// Display notifications
+function updateNotificationDisplay() {
+    const count = document.getElementById("notificationCount");
+    const list = document.getElementById("notificationList");
+
+    if (!count || !list) return;
+
+    count.textContent = unreadCount;
+
+    if (notifications.length === 0) {
+        list.textContent = "No notifications yet.";
+        return;
+    }
+
+    list.innerHTML = notifications.map(item => `
+        <div class="notification-item">
+            ${escapeHTML(item.message)}
+            <small>${escapeHTML(
+                new Date(item.time || item.created_at).toLocaleString()
+            )}</small>
+        </div>
+    `).join("");
+}
+
+// Open or close notification panel
+async function toggleNotifications() {
+    const panel = document.getElementById("notificationPanel");
+
+    if (!panel) return;
+
+    panel.classList.toggle("hidden");
+
+    if (!panel.classList.contains("hidden")) {
+        try {
+            await apiRequest("/notifications/read-all", "PUT");
+
+            notifications = notifications.map(item => ({
+                ...item,
+                is_read: true
+            }));
+
+            unreadCount = 0;
+
+            updateNotificationDisplay();
+
+        } catch (error) {
+            console.error(
+                "Could not mark notifications as read:",
+                error.message
+            );
+        }
+    }
+}
+
+// Notification button
+const notificationBell = document.getElementById("notificationBell");
+
+if (notificationBell) {
+    notificationBell.addEventListener("click", toggleNotifications);
+}
+
+// =====================================
+// LOGIN AND REGISTRATION
+// =====================================
+
 function showLogin() {
     document.getElementById("loginPage").classList.remove("hidden");
     document.getElementById("registerPage").classList.add("hidden");
     document.getElementById("dashboardPage").classList.add("hidden");
 }
 
-// Show registration page
 function showRegister() {
     document.getElementById("loginPage").classList.add("hidden");
     document.getElementById("registerPage").classList.remove("hidden");
 }
 
-// Register user
 async function register() {
     const name = document.getElementById("registerName").value.trim();
     const email = document.getElementById("registerEmail").value.trim();
@@ -61,13 +247,13 @@ async function register() {
         message.style.color = "green";
 
         setTimeout(showLogin, 1000);
+
     } catch (error) {
         message.textContent = error.message;
         message.style.color = "red";
     }
 }
 
-// Login user
 async function login() {
     const email = document.getElementById("loginEmail").value.trim();
     const password = document.getElementById("loginPassword").value;
@@ -86,13 +272,17 @@ async function login() {
         localStorage.setItem("user", JSON.stringify(currentUser));
 
         openDashboard();
+
     } catch (error) {
         message.textContent = error.message;
         message.style.color = "red";
     }
 }
 
-// Open dashboard
+// =====================================
+// DASHBOARD
+// =====================================
+
 function openDashboard() {
     document.getElementById("loginPage").classList.add("hidden");
     document.getElementById("registerPage").classList.add("hidden");
@@ -101,12 +291,29 @@ function openDashboard() {
     document.getElementById("userName").textContent =
         currentUser ? currentUser.name : "User";
 
+    connectNotifications();
+
+    loadNotifications();
+
     showSection("dashboard");
     loadDashboard();
 }
 
-// Logout
+// =====================================
+// LOGOUT
+// =====================================
+
 function logout() {
+    if (socket) {
+        socket.disconnect();
+        socket = null;
+    }
+
+    notifications = [];
+    unreadCount = 0;
+
+    updateNotificationDisplay();
+
     localStorage.removeItem("token");
     localStorage.removeItem("user");
 
@@ -116,7 +323,10 @@ function logout() {
     showLogin();
 }
 
-// Switch dashboard sections
+// =====================================
+// DASHBOARD SECTION SWITCHING
+// =====================================
+
 function showSection(section) {
     document.querySelectorAll(".content-section").forEach(item => {
         item.classList.add("hidden");
@@ -131,11 +341,16 @@ function showSection(section) {
     if (section === "dashboard") loadDashboard();
 }
 
-// Load dashboard statistics
+// =====================================
+// LOAD DASHBOARD STATISTICS
+// =====================================
+
 async function loadDashboard() {
     try {
         const projects = await apiRequest("/projects");
-        document.getElementById("projectCount").textContent = projects.length;
+
+        document.getElementById("projectCount").textContent =
+            projects.length;
 
         let totalTasks = 0;
         let completedTasks = 0;
@@ -146,12 +361,14 @@ async function loadDashboard() {
             );
 
             totalTasks += tasks.length;
+
             completedTasks += tasks.filter(
                 task => task.status === "Completed"
             ).length;
         }
 
         document.getElementById("taskCount").textContent = totalTasks;
+
         document.getElementById("completedCount").textContent =
             completedTasks;
 
@@ -168,13 +385,17 @@ async function loadDashboard() {
             : "No projects available.";
 
     } catch (error) {
-        alert(error.message);
+        console.error("Dashboard error:", error.message);
     }
 }
 
-// Create project
+// =====================================
+// CREATE PROJECT
+// =====================================
+
 async function createProject() {
     const name = document.getElementById("projectName").value.trim();
+
     const description =
         document.getElementById("projectDescription").value.trim();
 
@@ -200,7 +421,10 @@ async function createProject() {
     }
 }
 
-// View projects
+// =====================================
+// VIEW PROJECTS
+// =====================================
+
 async function loadProjects() {
     const list = document.getElementById("projectList");
 
@@ -224,19 +448,25 @@ async function loadProjects() {
     }
 }
 
-// Update project
+// =====================================
+// UPDATE PROJECT
+// =====================================
+
 async function editProject(id) {
     const name = prompt("Enter updated project name:");
+
     if (name === null || !name.trim()) return;
 
     const description = prompt("Enter updated description:") || "";
 
     try {
         await apiRequest(`/projects/${id}`, "PUT", {
-            name: name.trim(), description
+            name: name.trim(),
+            description
         });
 
         alert("Project updated successfully!");
+
         await loadProjects();
         await loadDashboard();
 
@@ -245,18 +475,24 @@ async function editProject(id) {
     }
 }
 
-// Create task
+// =====================================
+// CREATE TASK
+// =====================================
+
 async function createTask() {
     const project_id = Number(
         document.getElementById("taskProjectId").value
     );
 
     const title = document.getElementById("taskTitle").value.trim();
+
     const description =
         document.getElementById("taskDescription").value.trim();
 
     const status = document.getElementById("taskStatus").value;
-    const due_date = document.getElementById("taskDueDate").value || null;
+
+    const due_date =
+        document.getElementById("taskDueDate").value || null;
 
     const message = document.getElementById("taskMessage");
 
@@ -279,7 +515,10 @@ async function createTask() {
     }
 }
 
-// View tasks
+// =====================================
+// VIEW TASKS
+// =====================================
+
 async function loadTasks() {
     const projectId =
         document.getElementById("viewTaskProjectId").value;
@@ -315,9 +554,13 @@ async function loadTasks() {
     }
 }
 
-// Update task
+// =====================================
+// UPDATE TASK
+// =====================================
+
 async function editTask(id, projectId) {
     const title = prompt("Enter task title:");
+
     if (title === null || !title.trim()) return;
 
     const description = prompt("Enter task description:") || "";
@@ -331,14 +574,19 @@ async function editTask(id, projectId) {
         return;
     }
 
-    const due_date = prompt("Enter due date (YYYY-MM-DD), or leave blank:") || null;
+    const due_date =
+        prompt("Enter due date (YYYY-MM-DD), or leave blank:") || null;
 
     try {
         await apiRequest(`/tasks/${id}`, "PUT", {
-            title: title.trim(), description, status, due_date
+            title: title.trim(),
+            description,
+            status,
+            due_date
         });
 
         alert("Task updated successfully!");
+
         await loadTasks();
         await loadDashboard();
 
@@ -347,7 +595,10 @@ async function editTask(id, projectId) {
     }
 }
 
-// Add comment
+// =====================================
+// ADD COMMENT
+// =====================================
+
 async function addComment() {
     const task_id = Number(
         document.getElementById("commentTaskId").value
@@ -374,7 +625,10 @@ async function addComment() {
     }
 }
 
-// View comments
+// =====================================
+// VIEW COMMENTS
+// =====================================
+
 async function loadComments() {
     const taskId =
         document.getElementById("viewCommentTaskId").value;
@@ -410,7 +664,10 @@ async function loadComments() {
     }
 }
 
-// Delete comment
+// =====================================
+// DELETE COMMENT
+// =====================================
+
 async function deleteComment(id) {
     if (!confirm("Are you sure you want to delete this comment?")) return;
 
@@ -418,6 +675,7 @@ async function deleteComment(id) {
         await apiRequest(`/comments/${id}`, "DELETE");
 
         alert("Comment deleted successfully!");
+
         loadComments();
 
     } catch (error) {
@@ -425,7 +683,10 @@ async function deleteComment(id) {
     }
 }
 
-// Safely display text received from API
+// =====================================
+// SAFE HTML DISPLAY
+// =====================================
+
 function escapeHTML(value) {
     return String(value).replace(/[&<>"']/g, char => ({
         "&": "&amp;",
@@ -436,7 +697,10 @@ function escapeHTML(value) {
     })[char]);
 }
 
-// Restore login session
+// =====================================
+// RESTORE LOGIN SESSION
+// =====================================
+
 if (token && currentUser) {
     openDashboard();
 } else {

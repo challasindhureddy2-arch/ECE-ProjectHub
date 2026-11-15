@@ -26,6 +26,7 @@
                 Don't have an account?
                 <a href="#" onclick="showRegister()">Register</a>
             </p>
+
             <p id="loginMessage" class="message"></p>
         </div>
     </section>
@@ -46,6 +47,7 @@
                 Already have an account?
                 <a href="#" onclick="showLogin()">Login</a>
             </p>
+
             <p id="registerMessage" class="message"></p>
         </div>
     </section>
@@ -53,6 +55,7 @@
     <!-- Main Dashboard -->
     <section id="dashboardPage" class="hidden">
 
+        <!-- Sidebar -->
         <aside class="sidebar">
             <h2>ECE ProjectHub</h2>
 
@@ -66,45 +69,83 @@
             <button class="logout-btn" onclick="logout()">Logout</button>
         </aside>
 
+        <!-- Main Content -->
         <main class="main-content">
+
+            <!-- Header -->
             <header>
                 <div>
                     <h1 id="pageTitle">Dashboard</h1>
                     <p>Welcome to your project workspace!</p>
                 </div>
-                <div id="userName">User</div>
+
+                <div class="header-actions">
+
+                    <div id="userName">User</div>
+
+                    <!-- Notification Bell -->
+                    <div class="notification-area">
+
+                        <button id="notificationBell" type="button">
+                            🔔 Notifications
+                            <span id="notificationCount">0</span>
+                        </button>
+
+                        <!-- Notification Panel -->
+                        <div id="notificationPanel" class="notification-panel hidden">
+                            <h3>Notifications</h3>
+
+                            <div id="notificationList">
+                                No notifications yet.
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
             </header>
 
-            <!-- Dashboard -->
+            <!-- Dashboard Section -->
             <div id="dashboardSection" class="content-section">
+
                 <div class="stats">
+
                     <div class="stat-card">
                         <h3>Total Projects</h3>
                         <h1 id="projectCount">0</h1>
                     </div>
+
                     <div class="stat-card">
                         <h3>Total Tasks</h3>
                         <h1 id="taskCount">0</h1>
                     </div>
+
                     <div class="stat-card">
                         <h3>Completed Tasks</h3>
                         <h1 id="completedCount">0</h1>
                     </div>
+
                 </div>
 
                 <div class="panel">
                     <h2>Recent Projects</h2>
                     <div id="recentProjects">No projects available.</div>
                 </div>
+
             </div>
 
-            <!-- Projects -->
+            <!-- Projects Section -->
             <div id="projectsSection" class="content-section hidden">
+
                 <div class="panel">
                     <h2>Create New Project</h2>
+
                     <input id="projectName" placeholder="Project name">
-                    <textarea id="projectDescription" placeholder="Project description"></textarea>
+
+                    <textarea id="projectDescription"
+                        placeholder="Project description"></textarea>
+
                     <button onclick="createProject()">Add Project</button>
+
                     <p id="projectMessage" class="message"></p>
                 </div>
 
@@ -112,15 +153,22 @@
                     <h2>All Projects</h2>
                     <div id="projectList"></div>
                 </div>
+
             </div>
 
-            <!-- Tasks -->
+            <!-- Tasks Section -->
             <div id="tasksSection" class="content-section hidden">
+
                 <div class="panel">
                     <h2>Create New Task</h2>
-                    <input type="number" id="taskProjectId" placeholder="Project ID">
+
+                    <input type="number" id="taskProjectId"
+                        placeholder="Project ID">
+
                     <input id="taskTitle" placeholder="Task title">
-                    <textarea id="taskDescription" placeholder="Task description"></textarea>
+
+                    <textarea id="taskDescription"
+                        placeholder="Task description"></textarea>
 
                     <select id="taskStatus">
                         <option>Pending</option>
@@ -132,38 +180,61 @@
                     <input type="date" id="taskDueDate">
 
                     <button onclick="createTask()">Add Task</button>
+
                     <p id="taskMessage" class="message"></p>
                 </div>
 
                 <div class="panel">
                     <h2>View Tasks</h2>
-                    <input type="number" id="viewTaskProjectId" placeholder="Enter Project ID">
+
+                    <input type="number" id="viewTaskProjectId"
+                        placeholder="Enter Project ID">
+
                     <button onclick="loadTasks()">View Tasks</button>
+
                     <div id="taskList"></div>
                 </div>
+
             </div>
 
-            <!-- Comments -->
+            <!-- Comments Section -->
             <div id="commentsSection" class="content-section hidden">
+
                 <div class="panel">
                     <h2>Add Comment</h2>
-                    <input type="number" id="commentTaskId" placeholder="Task ID">
-                    <textarea id="commentText" placeholder="Write your comment"></textarea>
+
+                    <input type="number" id="commentTaskId"
+                        placeholder="Task ID">
+
+                    <textarea id="commentText"
+                        placeholder="Write your comment"></textarea>
+
                     <button onclick="addComment()">Add Comment</button>
+
                     <p id="commentMessage" class="message"></p>
                 </div>
 
                 <div class="panel">
                     <h2>View Comments</h2>
-                    <input type="number" id="viewCommentTaskId" placeholder="Enter Task ID">
+
+                    <input type="number" id="viewCommentTaskId"
+                        placeholder="Enter Task ID">
+
                     <button onclick="loadComments()">View Comments</button>
+
                     <div id="commentList"></div>
                 </div>
+
             </div>
 
         </main>
     </section>
 
+    <!-- Socket.IO Client -->
+    <script src="/socket.io/socket.io.js"></script>
+
+    <!-- Existing JavaScript -->
     <script src="script.js"></script>
+
 </body>
 </html>

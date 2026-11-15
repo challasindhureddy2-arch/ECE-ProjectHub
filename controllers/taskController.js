@@ -1,7 +1,33 @@
 
 const Task = require("../models/Task");
+const Notification = require("../models/Notification");
 
 const validStatuses = ["Pending", "In Progress", "Completed"];
+
+// Save notification and send real-time update
+function sendRealtimeUpdate(req, eventName, message) {
+    Notification.create(req.user.id, message, (err, result) => {
+        if (err) {
+            console.error("Notification save failed:", err);
+            return;
+        }
+
+        const io = req.app.get("io");
+
+        if (!io) return;
+
+        const room = `user:${req.user.id}`;
+
+        io.to(room).emit("notification", {
+            id: result.insertId,
+            message: message,
+            is_read: false,
+            createdAt: new Date().toISOString()
+        });
+
+        io.to(room).emit(eventName);
+    });
+}
 
 // CREATE TASK
 exports.createTask = (req, res) => {
@@ -49,6 +75,12 @@ exports.createTask = (req, res) => {
                     message: "Project not found or access denied"
                 });
             }
+
+            sendRealtimeUpdate(
+                req,
+                "task_updated",
+                `New task created: ${title}`
+            );
 
             res.status(201).json({
                 message: "Task created successfully",
@@ -129,6 +161,12 @@ exports.updateTask = (req, res) => {
                 });
             }
 
+            sendRealtimeUpdate(
+                req,
+                "task_updated",
+                `Task updated: ${title}`
+            );
+
             res.json({
                 message: "Task updated successfully"
             });
@@ -151,6 +189,12 @@ exports.deleteTask = (req, res) => {
                 message: "Task not found"
             });
         }
+
+        sendRealtimeUpdate(
+            req,
+            "task_updated",
+            "A task was deleted."
+        );
 
         res.json({
             message: "Task deleted successfully"

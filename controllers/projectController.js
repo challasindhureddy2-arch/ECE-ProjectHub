@@ -1,5 +1,31 @@
 
 const Project = require("../models/Project");
+const Notification = require("../models/Notification");
+
+// Save notification and send real-time update
+function sendRealtimeUpdate(req, eventName, message) {
+    Notification.create(req.user.id, message, (err, result) => {
+        if (err) {
+            console.error("Notification save failed:", err);
+            return;
+        }
+
+        const io = req.app.get("io");
+
+        if (!io) return;
+
+        const room = `user:${req.user.id}`;
+
+        io.to(room).emit("notification", {
+            id: result.insertId,
+            message: message,
+            is_read: false,
+            createdAt: new Date().toISOString()
+        });
+
+        io.to(room).emit(eventName);
+    });
+}
 
 // CREATE PROJECT
 exports.createProject = (req, res) => {
@@ -22,6 +48,12 @@ exports.createProject = (req, res) => {
                     message: "Failed to create project"
                 });
             }
+
+            sendRealtimeUpdate(
+                req,
+                "project_updated",
+                `New project created: ${name}`
+            );
 
             res.status(201).json({
                 message: "Project created successfully",
@@ -94,6 +126,12 @@ exports.updateProject = (req, res) => {
                 });
             }
 
+            sendRealtimeUpdate(
+                req,
+                "project_updated",
+                `Project updated: ${name}`
+            );
+
             res.json({
                 message: "Project updated successfully"
             });
@@ -116,6 +154,12 @@ exports.deleteProject = (req, res) => {
                 message: "Project not found"
             });
         }
+
+        sendRealtimeUpdate(
+            req,
+            "project_updated",
+            "A project was deleted."
+        );
 
         res.json({
             message: "Project deleted successfully"
